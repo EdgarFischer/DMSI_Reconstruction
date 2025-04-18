@@ -1,0 +1,14 @@
+# Ignore dataset files and large files
+*.csv
+*.tsv
+*.json
+*.xml
+*.hdf5
+*.h5
+*.zip
+*.tar.gz
+*.npz
+*.pth
+*.pt
+*.onnx
+*.
