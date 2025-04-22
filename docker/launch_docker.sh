@@ -22,6 +22,7 @@ docker run -d \
   --name mrjo \
   -p 8888:8888 \
   -v "${SSH_AUTH_SOCK}:/ssh-agent.sock" \
+  -v "${HOME}/.ssh:/home/hostuser/.ssh:ro" \
   -e SSH_AUTH_SOCK=/ssh-agent.sock \
   -e GIT_AUTHOR_NAME="${GIT_NAME}" \
   -e GIT_AUTHOR_EMAIL="${GIT_EMAIL}" \
