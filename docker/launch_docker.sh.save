@@ -1,0 +1,9 @@
+
+docker run -d \
+  --gpus all \
+  --name mrjo \
+  -p 8888:8888 \
+  -v "$SSH_AUTH_SOCK":/ssh-agent.sock \
+  -e SSH_AUTH_SOCK=/ssh-agent.sock \
+  -v /ceph/mri.meduniwien.ac.at/departments/radiology/mrsbrain/public/hfish:/workspace \
+  dl
