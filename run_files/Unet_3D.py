@@ -1,10 +1,13 @@
 import os
 import sys
+from pathlib import Path
+
+os.chdir(Path(__file__).parent)
 
 sys.path.append('../scripts')
 sys.path.append('../models')
 
-os.environ["CUDA_VISIBLE_DEVICES"]= '3' #, this way I would choose GPU 3 to do the work
+os.environ["CUDA_VISIBLE_DEVICES"]= '1' #, this way I would choose GPU 3 to do the work
 
 import torch
 import numpy as np
