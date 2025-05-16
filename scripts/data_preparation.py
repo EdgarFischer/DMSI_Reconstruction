@@ -853,17 +853,18 @@ def apply_domain_transforms(domain: str, undersampled_data: np.ndarray, ground_t
     Raises:
         ValueError: If an invalid domain is provided.
     """
+
     if domain == "kzfT":
         # Perform spectral transformation along axis -3
-        undersampled_data = np.fft.fftshift(np.fft.fft(undersampled_data, axis=-3), axes=-3)
-        ground_truth = np.fft.fftshift(np.fft.fft(ground_truth, axis=-3), axes=-3)
-        # Additional transformation to k-space along axis 3
         undersampled_data = np.fft.fftshift(np.fft.fft(undersampled_data, axis=3), axes=3)
         ground_truth = np.fft.fftshift(np.fft.fft(ground_truth, axis=3), axes=3)
+        # Additional transformation to k-space along axis 3
+        undersampled_data = np.fft.fftshift(np.fft.fft(undersampled_data, axis=2), axes=2)
+        ground_truth = np.fft.fftshift(np.fft.fft(ground_truth, axis=2), axes=2)
     elif domain == "zfT" or domain == "xyf":
         # Perform spectral transformation along axis -3 only
-        undersampled_data = np.fft.fftshift(np.fft.fft(undersampled_data, axis=-3), axes=-3)
-        ground_truth = np.fft.fftshift(np.fft.fft(ground_truth, axis=-3), axes=-3)
+        undersampled_data = np.fft.fftshift(np.fft.fft(undersampled_data, axis=3), axes=3)
+        ground_truth = np.fft.fftshift(np.fft.fft(ground_truth, axis=3), axes=3)
     elif domain == "ztT":
         # No FFT transformation is performed for "ztT"
         pass
@@ -879,21 +880,6 @@ def apply_domain_transforms(domain: str, undersampled_data: np.ndarray, ground_t
     return undersampled_data, ground_truth
 
 
-# Example usage:
-if __name__ == "__main__":
-    # Define your domain, undersampled data, and ground truth arrays.
-    domain = "kzfT"  # Change to any valid domain: "kzfT", "zfT", "ztT", "xyz", or "xzT"
-    
-    # Example arrays (replace these with your actual data)
-    undersampled_data = np.random.rand(10, 10, 10, 10, 10, 10)
-    ground_truth = np.random.rand(10, 10, 10, 10, 10, 10)
 
-    # Get the reshape vectors for the specified domain.
-    reshape_vector, inverse_reshape = get_reshape_vectors(domain)
-    print("Reshape Vector:", reshape_vector)
-    print("Inverse Reshape Vector:", inverse_reshape)
-
-    # Apply the domain-specific FFT transforms.
-    transformed_us_data, transformed_gt = apply_domain_transforms(domain, undersampled_data, ground_truth)
 
 

@@ -19,6 +19,7 @@ events.out.tfevents.*
 *.raw
 *.gz
 *.pyc
+*.png
 
 # Ignore Jupyter notebook checkpoints
 .ipynb_checkpoints/

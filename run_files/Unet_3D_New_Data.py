@@ -1,10 +1,15 @@
 import os
 import sys
 
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
 sys.path.append('../scripts')
 sys.path.append('../models')
+sys.path.append('../configs')
 
-os.environ["CUDA_VISIBLE_DEVICES"]= '1' #, this way I would choose GPU 3 to do the work
+import config_Unet3D
+
+os.environ["CUDA_VISIBLE_DEVICES"]= config_Unet3D.CUDA #, this way I would choose GPU 3 to do the work
 
 import torch
 import numpy as np
@@ -26,96 +31,120 @@ from torchmetrics.image import StructuralSimilarityIndexMeasure as ssim
 from torchmetrics.image.ssim import StructuralSimilarityIndexMeasure
 from torchmetrics.image import PeakSignalNoiseRatio 
 
-grouped_time_steps = 1  # Set how many subsequent time steps you want to give to the network at once. Values allowed: 1, 2, 4, 8 (because it has to divide 8)
+grouped_time_steps = config_Unet3D.grouped_time_steps  # Set how many subsequent time steps you want to give to the network at once. Values allowed: 1, 2, 4, 8 (because it has to divide 8)
 
 ######## SET PARAMETERS ########
 #### Undersampling Strategy:#####
 #Real_Undersampling = True ## If True is chosen, the undersampling data that is directly obtained from undersampling on the raw ring structure is taken with non uniform FT.
-Undersampling = "Possoin_Real" # Options: Regular or Possoin, Regular_Real, Possoin_Real
-Sampling_Mask = "Complementary_Masks" #Options: Single_Combination or One_Mask or Complementary_Masks
-AF = 5 #  acceleration factor
-DOMAIN = "zfT"# Input axes that goes into the network (as well as output), 
+Undersampling = config_Unet3D.Undersampling # Options: Regular or Possoin, Regular_Real, Possoin_Real
+Sampling_Mask = config_Unet3D.Sampling_Mask #Options: Single_Combination or One_Mask or Complementary_Masks
+AF = config_Unet3D.AF   #  acceleration factor
+DOMAIN = config_Unet3D.DOMAIN# Input axes that goes into the network (as well as output), 
             # valid options: kzfT (this means k_z in kspace); zfT; ztT; xyz; xzT; xyf
 
 #### Model Input and Output ####
-GT_Data = "LowRank" # Options: FullRank LowRank for GROUNDTRUTH! 
-Low_Rank_Input = True ## apply low rank to the input as well if True
+GT_Data = config_Unet3D.GT_Data # Options: FullRank LowRank for GROUNDTRUTH! 
+Low_Rank_Input = config_Unet3D.Low_Rank_Input ## apply low rank to the input as well if True
 
-batch_size=120
-num_epochs = 2000
-print_every = 1
-trancuate_t = 96
+batch_size=config_Unet3D.batch_size
+num_epochs = config_Unet3D.num_epochs
+print_every = config_Unet3D.print_every
+trancuate_t = config_Unet3D.trancuate_t
 
 #### Parameter setting END ####
 
 #### Define ground truth path####
-ground_truth_path = "../data/Ground_Truth/Multi_Channel/data.npy"
+ground_truth_path = "../data/Ground_Truth/Full_Rank/"+config_Unet3D.dataset
     
 #### Assemble saving path ####
 
 #### Definie Model path
 if GT_Data == "FullRank":
-    model_save_dir = f"../saved_models/UNet_3D_new_data/"+DOMAIN+"/Full2Full/"+Undersampling+f'/AF_{AF}/'+f'Truncate_t_{trancuate_t}/'+Sampling_Mask
+    model_save_dir = f"../saved_models/UNet_3D_new_data/"+DOMAIN+"/Full2Full/"+Undersampling+f'/AF_{AF}/'+f'Truncate_t_{trancuate_t}/'+Sampling_Mask+'/'+config_Unet3D.folder_name
 elif GT_Data == "LowRank":
-    model_save_dir = f"../saved_models/UNet_3D_new_data/"+DOMAIN+"/Low2Low/"+Undersampling+f'/AF_{AF}/'+f'Truncate_t_{trancuate_t}/'+Sampling_Mask
+    model_save_dir = f"../saved_models/UNet_3D_new_data/"+DOMAIN+"/Low2Low/"+Undersampling+f'/AF_{AF}/'+f'Truncate_t_{trancuate_t}/'+Sampling_Mask+'/'+config_Unet3D.folder_name
     
 #### Define log directory path
 if GT_Data == "FullRank":
-    log_dir = f"../log_files/UNet_3D_new_data/"+DOMAIN+"/Full2Full/"+Undersampling+f'/AF_{AF}/'+f'Truncate_t_{trancuate_t}/'+Sampling_Mask
+    log_dir = f"../log_files/UNet_3D_new_data/"+DOMAIN+"/Full2Full/"+Undersampling+f'/AF_{AF}/'+f'Truncate_t_{trancuate_t}/'+Sampling_Mask+'/'+config_Unet3D.folder_name
 elif GT_Data == "LowRank":
-    log_dir = f"../log_files/UNet_3D_new_data/"+DOMAIN+"/Low2Low/"+Undersampling+f'/AF_{AF}/'+f'Truncate_t_{trancuate_t}/'+Sampling_Mask
+    log_dir = f"../log_files/UNet_3D_new_data/"+DOMAIN+"/Low2Low/"+Undersampling+f'/AF_{AF}/'+f'Truncate_t_{trancuate_t}/'+Sampling_Mask+'/'+config_Unet3D.folder_name
+
+if os.path.exists(model_save_dir):
+    raise FileExistsError(f"The directory '{model_save_dir}' already exists. Please choose a different folder name.")
 
 #### Define Input Data path
-undersampled_data_path = "../data/Undersampled_Data_New/data.npy"
+undersampled_data_path = "../data/Undersampled_Data/"+Undersampling+f'/AF_{AF}/'+Sampling_Mask+'/'+config_Unet3D.dataset
 
 #### load data!
 Ground_Truth = np.load(ground_truth_path)
 Undersampled_Data = np.load(undersampled_data_path)
 
-#if Low_Rank_Input:
-#    for i in range(0,6):
-#        Undersampled_Data[...,i] = low_rank(Undersampled_Data[...,i], 8)
-#        if GT_Data == "LowRank":
-#            Ground_Truth[...,i] = low_rank(Ground_Truth[...,i], 8)
+# number of patients = size of last axis if 6D, else 1
+Patient_Number = Ground_Truth.shape[-1] if Ground_Truth.ndim == 6 else 1
 
-Ground_Truth = Ground_Truth[...,:40,:96,:]
-Undersampled_Data = Undersampled_Data[...,:40,:96,:]
+if Low_Rank_Input:
+    if Patient_Number == 1:
+        # single “patient” → apply low-rank on whole volume
+        Undersampled_Data = low_rank(Undersampled_Data, 8)
+        if GT_Data == "LowRank":
+            Ground_Truth = low_rank(Ground_Truth, 8)
+    else:
+        # multiple patients → process each slice along last axis
+        for i in range(Patient_Number):
+            Undersampled_Data[..., i] = low_rank(Undersampled_Data[..., i], 8)
+            if GT_Data == "LowRank":
+                Ground_Truth[..., i] = low_rank(Ground_Truth[..., i], 8)
+
 
 ###normalize entire 5D volumes volumes 
-Ground_Truth = Ground_Truth/np.max(np.abs(Ground_Truth))
-Undersampled_Data = Undersampled_Data/np.max(np.abs(Undersampled_Data))
+if Patient_Number == 1:
+    Ground_Truth = Ground_Truth/np.max(np.abs(Ground_Truth))
+    Undersampled_Data = Undersampled_Data/np.max(np.abs(Undersampled_Data))
+else:
+    for i in range(0,Patient_Number):
+        Ground_Truth[...,i] = Ground_Truth[...,i]/np.max(np.abs(Ground_Truth[...,i]))
+        Undersampled_Data[...,i] = Undersampled_Data[...,i]/np.max(np.abs(Undersampled_Data[...,i]))
 
-MASKS = np.load("../data/masks.npy")
-GM_Masks = np.load("../data/GM_masks.npy")
-WM_Masks = np.load("../data/WM_masks.npy")
+#MASKS = np.load("../data/masks.npy")
+
+#### PADDING
+padding_x = config_Unet3D.zero_pad_xyz - Ground_Truth.shape[0]
+padding_y = config_Unet3D.zero_pad_xyz - Ground_Truth.shape[1]
+padding_z = config_Unet3D.zero_pad_xyz - Ground_Truth.shape[2]
+padding_t = config_Unet3D.zero_pad_t - Ground_Truth.shape[3]
+padding_T = config_Unet3D.zero_pad_T - Ground_Truth.shape[4]
+
+# put them in a dict for easy lookup
+pad_dict = {
+    0: padding_x,
+    1: padding_y,
+    2: padding_z,
+    3: padding_t,
+    4: padding_T
+}
+
+# build pad_width: for each axis i, pad (0, pad_dict[i]) if i<5, else (0,0)
+pad_width = [(0, pad_dict.get(i, 0)) for i in range(Ground_Truth.ndim)]
+
+# apply the same padding to both arrays
+Ground_Truth      = np.pad(Ground_Truth,      pad_width,
+                           mode='constant', constant_values=0)
+Undersampled_Data = np.pad(Undersampled_Data, pad_width,
+                           mode='constant', constant_values=0)
 
 # Undersampled_Data[...,-1] = torch.load('norm_mrsi_recons.pt').numpy()
 ####
-mask_expanded = np.ones((32,32,40,96,8))  # Now shape is (22,22,21,1,1,6)
-# Use broadcasting to "repeat" the mask along these new axes:
-#mask_extended = np.broadcast_to(mask_expanded, (22, 22, 21, 96, 8, 6))
-mask_extended = mask_expanded + 1J*mask_expanded
-
-padding_last_axis = 8 - Ground_Truth.shape[-1]  # 8 - 3 = 5
-
-# Build the pad_width list. For every axis except the last, pad with (0,0).
-pad_width = [(0, 0)] * (Ground_Truth.ndim - 1) + [(0, padding_last_axis)]
-
-Ground_Truth = np.pad(Ground_Truth, pad_width, mode='constant', constant_values=0)
-Undersampled_Data = np.pad(Undersampled_Data, pad_width, mode='constant', constant_values=0)
-
-# Undersampled_Data[...,-1] = torch.load('norm_mrsi_recons.pt').numpy()
-####
-mask_expanded = np.ones((32,32,40,96,8))  # Now shape is (22,22,21,1,1,6)
-# Use broadcasting to "repeat" the mask along these new axes:
+mask_expanded = np.ones_like(Ground_Truth)       #long these new axes:
 #mask_extended = np.broadcast_to(mask_expanded, (22, 22, 21, 96, 8, 6))
 mask_extended = mask_expanded + 1J*mask_expanded
 
 reshape_vector, inverse_reshape = get_reshape_vectors(DOMAIN)
-reshape_vector, inverse_reshape = reshape_vector[:5], inverse_reshape[:5]
 
-Undersampled_Data, Ground_Truth = np.fft.fftshift(np.fft.fft(Undersampled_Data, axis=-2), axes=-2), np.fft.fftshift(np.fft.fft(Ground_Truth, axis=-2), axes=-2)
-    
+if Patient_Number == 1: 
+    reshape_vector, inverse_reshape = reshape_vector[:5], inverse_reshape[:5]
+
+Undersampled_Data, Ground_Truth = apply_domain_transforms(DOMAIN, Undersampled_Data, Ground_Truth)    
 #### Reshaping !
 Undersampled_Data, Ground_Truth, mask_extended = Undersampled_Data.transpose(reshape_vector) , Ground_Truth.transpose(reshape_vector), mask_extended.transpose(reshape_vector)  
 original_shape = Ground_Truth.copy().shape
@@ -217,6 +246,15 @@ best_model_path   = os.path.join(model_save_dir, 'best_model.pth')
 
 os.makedirs(model_save_dir, exist_ok=True)
 os.makedirs(log_dir, exist_ok=True)
+
+# copy the config into the model folder
+import shutil
+src_config = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    '..', 'configs', 'config_Unet3D.py'
+)
+dst_config = os.path.join(model_save_dir, 'config_Unet3D.py')
+shutil.copy2(src_config, dst_config)
 
 # ------------------------------------------------------------------------
 #  Initialize model, optimizer, loss, etc.
